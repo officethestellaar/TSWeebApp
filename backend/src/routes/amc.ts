@@ -2,40 +2,17 @@ import express from 'express';
 import prisma from '../lib/prisma';
 import { authenticateToken, authorizeRoles, AuthRequest } from '../middleware/auth';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import { emitEvent } from '../lib/socket';
 import { createAuditLog } from '../lib/audit';
 import { triggerWorkflow } from '../lib/n8n';
 import { commitToLedger } from '../lib/ledger';
+import { uploadFile } from '../lib/storage';
 
 const router = express.Router();
 
-// Multer setup for payment proof uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = 'uploads/amc-proofs';
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'AMC-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({ 
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-  fileFilter: (req, file, cb) => {
-    const filetypes = /jpeg|jpg|png|pdf/;
-    const mimetype = filetypes.test(file.mimetype);
-    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-    if (mimetype && extname) return cb(null, true);
-    cb(new Error('Only images and PDFs are allowed'));
-  }
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
 
 // Member: Submit AMC payment proof
@@ -57,13 +34,19 @@ router.post('/submit', authenticateToken, upload.single('proof'), async (req: Au
       });
     }
 
+    let proofUrl: string | null = null;
+    if (req.file) {
+      const filename = `amc-proofs/${userId}-${Date.now()}-${req.file.originalname}`;
+      proofUrl = await uploadFile(req.file.buffer, filename, req.file.mimetype);
+    }
+
     const amcRequest = await prisma.aMCPaymentRequest.create({
       data: {
         memberId: userId!,
         amount: Number(amount),
         transactionRef: transactionRef || null,
         paymentDate: new Date(paymentDate || new Date()),
-        proofUrl: req.file ? req.file.path : null,
+        proofUrl,
         status: 'PENDING'
       }
     });
@@ -243,12 +226,7 @@ router.get('/proof/:id', authenticateToken, authorizeRoles('SUPER_ADMIN', 'ADMIN
 
     if (!request || !request.proofUrl) return res.status(404).json({ message: 'Evidence node not found.' });
 
-    const filePath = path.resolve(request.proofUrl);
-    if (fs.existsSync(filePath)) {
-      res.sendFile(filePath);
-    } else {
-      res.status(404).json({ message: 'File not found on server' });
-    }
+    res.redirect(request.proofUrl);
   } catch (error) {
     res.status(500).json({ message: 'Internal server error' });
   }

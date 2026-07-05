@@ -8,7 +8,7 @@ import * as xlsx from 'xlsx';
 import { createAuditLog } from '../lib/audit';
 import { clearCachePattern } from '../lib/cache';
 import { Parser } from 'json2csv';
-import path from 'path';
+import { uploadFile } from '../lib/storage';
 
 const router = express.Router();
 
@@ -16,14 +16,7 @@ const router = express.Router();
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// Disk storage for permanent payment proofs
-const proofStorage = multer.diskStorage({
-  destination: 'uploads/member-proofs/',
-  filename: (req, file, cb) => {
-    cb(null, `proof-${Date.now()}${path.extname(file.originalname)}`);
-  }
-});
-const uploadProof = multer({ storage: proofStorage });
+const uploadProof = multer({ storage: multer.memoryStorage() });
 
 // Export Members as CSV
 router.get('/export/csv', authenticateToken, authorizeRoles('SUPER_ADMIN', 'ADMIN', 'CLUB_MANAGER'), async (req, res) => {
@@ -205,7 +198,8 @@ router.post('/', authenticateToken, authorizeRoles('SUPER_ADMIN', 'ADMIN', 'CLUB
 
     // Link uploaded proof if exists
     if (req.file) {
-      memberData.paymentProofUrl = `/uploads/member-proofs/${req.file.filename}`;
+      const filename = `member-proofs/${Date.now()}-${req.file.originalname}`;
+      memberData.paymentProofUrl = await uploadFile(req.file.buffer, filename, req.file.mimetype);
     }
 
     // Auto-generate membership number if not provided

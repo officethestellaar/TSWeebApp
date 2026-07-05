@@ -44,9 +44,9 @@ router.post('/backup', authenticateToken, authorizeRoles('SUPER_ADMIN', 'ADMIN')
   try {
     const result = await performBackup('manual-api');
     if (result.success) {
-      res.json({ message: 'Backup completed successfully', filename: result.filename, sizeBytes: result.sizeBytes });
+      res.json({ message: 'Backup completed successfully', filename: result.filename });
     } else {
-      res.status(500).json({ message: 'Backup failed', error: result.error });
+      res.status(500).json({ message: 'Backup failed' });
     }
   } catch (error: any) {
     res.status(500).json({ message: 'Backup failed', error: error.message });

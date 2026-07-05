@@ -1,6 +1,4 @@
-import { PrismaClient as LedgerClient } from '../generated/ledger-client';
-
-const ledgerPrisma = new LedgerClient();
+import prisma from './prisma';
 
 interface LedgerParams {
   staffId: number;
@@ -17,7 +15,7 @@ interface LedgerParams {
  */
 export const commitToLedger = async (params: LedgerParams) => {
   try {
-    await ledgerPrisma.transaction.create({
+    await prisma.transaction.create({
       data: {
         staffId: params.staffId,
         staffName: params.staffName,
@@ -38,7 +36,7 @@ export const commitToLedger = async (params: LedgerParams) => {
  * Retrieves all transactions from the secondary ledger.
  */
 export const getLedgerTransactions = async () => {
-  return await ledgerPrisma.transaction.findMany({
+  return await prisma.transaction.findMany({
     orderBy: { timestamp: 'desc' },
   });
 };
@@ -47,7 +45,7 @@ export const getLedgerTransactions = async () => {
  * Updates a transaction in the secondary ledger.
  */
 export const updateLedgerTransaction = async (id: number, data: any) => {
-  return await ledgerPrisma.transaction.update({
+  return await prisma.transaction.update({
     where: { id },
     data,
   });
@@ -57,7 +55,7 @@ export const updateLedgerTransaction = async (id: number, data: any) => {
  * Deletes a transaction from the secondary ledger.
  */
 export const deleteLedgerTransaction = async (id: number) => {
-  return await ledgerPrisma.transaction.delete({
+  return await prisma.transaction.delete({
     where: { id },
   });
 };

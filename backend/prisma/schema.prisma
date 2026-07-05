@@ -1295,6 +1295,20 @@ model ExportRequest {
   @@schema("public")
 }
 
+model Transaction {
+  id              Int      @id @default(autoincrement())
+  staffId         Int
+  staffName       String
+  memberName      String
+  memberId        String?
+  amount          Float
+  type            String
+  description     String
+  timestamp       DateTime @default(now())
+
+  @@schema("public")
+}
+
 enum aal_level {
   aal1
   aal2

@@ -8,30 +8,11 @@ import { createAuditLog } from '../lib/audit';
 import { commitToLedger } from '../lib/ledger';
 import { sendPaymentConfirmation } from '../lib/whatsapp';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
+import { uploadFile } from '../lib/storage';
 
-const proofStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = 'uploads/payment-proofs';
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, 'PAY-' + Date.now() + '-' + Math.round(Math.random() * 1e9) + path.extname(file.originalname));
-  }
-});
 const uploadProof = multer({
-  storage: proofStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowed = /jpeg|jpg|png|pdf/;
-    if (allowed.test(file.mimetype) || allowed.test(path.extname(file.originalname).toLowerCase())) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only images and PDFs are allowed'));
-    }
-  }
 });
 
 const router = express.Router();
@@ -343,7 +324,11 @@ router.post('/payment', authenticateToken, uploadProof.single('proof'), async (r
   try {
     const { invoiceId, amount, paymentMode, transactionId, referenceNumber } = req.body;
     const userId = req.user?.userId;
-    const proofUrl = req.file ? req.file.path : null;
+    let proofUrl: string | null = null;
+    if (req.file) {
+      const filename = `payment-proofs/${Date.now()}-${req.file.originalname}`;
+      proofUrl = await uploadFile(req.file.buffer, filename, req.file.mimetype);
+    }
 
     if (!userId) return res.status(401).json({ message: 'User not identified' });
 

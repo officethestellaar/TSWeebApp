@@ -59,7 +59,7 @@ app.use(cors({
     : '*',
 }));
 app.use(express.json());
-app.use('/uploads', express.static('uploads'));
+// Static file serving is not available on Vercel — use Supabase Storage
 
 app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', message: 'Stellaar Backend is running with Real-time support' });
@@ -99,35 +99,24 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-// Initialize Automation Jobs
-scheduleJobs();
-scheduleBackups();
+// Initialize Automation Jobs (disabled on Vercel serverless — use Vercel Cron Jobs instead)
+if (!process.env.VERCEL) {
+  scheduleJobs();
+  scheduleBackups();
+}
 
 // On-Start: sync registry + take an initial backup
-(async () => {
-  console.log('[Lifecycle] ┌──────────────────────────────────────────────');
-  console.log('[Lifecycle] │ 🔄 Initial registry alignment...');
-  try {
+if (!process.env.VERCEL) {
+  (async () => {
+    console.log('[Lifecycle] ┌──────────────────────────────────────────────');
     await synchronizeLocalRegistry();
-    console.log('[Lifecycle] │ ✅ Initial registry alignment successful.');
-  } catch (err) {
-    console.log('[Lifecycle] │ ⚠️  Initial registry alignment failed:', err);
-  }
-
-  console.log('[Lifecycle] │ 📦 Taking initial recovery snapshot...');
-  const result = await performBackup('startup');
-  if (result.success) {
-    console.log('[Lifecycle] │ ✅ Initial backup complete.');
-  } else {
-    console.log('[Lifecycle] │ ⚠️  Initial backup skipped:', result.error);
-  }
-
-  const status = getBackupStatus();
-  console.log(`[Lifecycle] ├─ Snapshots:    ${status.totalBackups}`);
-  console.log(`[Lifecycle] ├─ Total size:   ${status.totalSizeFormatted}`);
-  console.log(`[Lifecycle] └─ Last backup:  ${status.lastBackupAt ? new Date(status.lastBackupAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }) : 'N/A'}`);
-  console.log('[Lifecycle] ────────────────────────────────────────────────');
-})();
+    const result = await performBackup('startup');
+    const status = getBackupStatus();
+    console.log(`[Lifecycle] ├─ Snapshots:    ${status.totalBackups}`);
+    console.log(`[Lifecycle] └─ Last backup:  ${status.lastBackupAt || 'N/A'}`);
+    console.log('[Lifecycle] ────────────────────────────────────────────────');
+  })();
+}
 
 // On-Shutdown: backup then sync
 const gracefulShutdown = async (signal: string) => {
@@ -158,9 +147,15 @@ const gracefulShutdown = async (signal: string) => {
   process.exit(0);
 };
 
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+if (!process.env.VERCEL) {
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+}
 
-httpServer.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+if (!process.env.VERCEL) {
+  httpServer.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
+
+export { app, httpServer };
